@@ -1,0 +1,193 @@
+```gradle
+buildscript {
+    ext {
+        kotlin_version = '1.8.0'
+        lifecycle_version = "2.7.0"
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.0.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+```
+
+**`build.gradle (Module)`**
+```gradle
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'kotlin-kapt'
+}
+
+android {
+    compileSdk 33
+
+    defaultConfig {
+        applicationId "com.example.podcastplus"
+        minSdk 29
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "androidx.core:core-ktx:1.9.0"
+    implementation "androidx.appcompat:appcompat:1.5.1"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0"
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:2.7.0"
+    implementation "androidx.room:room-runtime:2.5.0"
+    kapt "androidx.room:room-compiler:2.5.0"
+    implementation "com.squareup.retrofit2:retrofit:2.9.0"
+    implementation "com.squareup.retrofit2:converter-gson:2.9.0"
+    implementation "com.squareup.picasso:picasso:2.8"
+    implementation "com.github.bumptech.glide:glide:4.14.2"
+    implementation "com.jakewharton.retrofit:retrofit2-kotlin-coroutines-adapter:0.9.2"
+}
+``
+
+```kotlin
+data class PodcastState(
+    val podcasts: List<Podcast> = emptyList(),
+    val currentEpisode: Episode? = null,
+    val isLoading: Boolean = false
+)
+```
+
+```kotlin
+sealed class PodcastAction {
+    object LoadPodcasts : PodcastAction()
+    data class SetPodcasts(val podcasts: List<Podcast>) : PodcastAction()
+    data class SetLoading(val isLoading: Boolean) : PodcastAction()
+}
+```
+```kotlin
+fun podcastReducer(state: PodcastState = PodcastState(), action: PodcastAction): PodcastState {
+    return when (action) {
+        is PodcastAction.LoadPodcasts -> state.copy(isLoading = true)
+        is PodcastAction.SetPodcasts -> state.copy(podcasts = action.podcasts, isLoading = false)
+        is PodcastAction.SetLoading -> state.copy(isLoading = action.isLoading)
+    }
+}
+```
+
+```kotlin
+class PodcastStore : Observable<PodcastState> {
+    private val _state = MutableStateFlow(PodcastState())
+    val state: StateFlow<PodcastState> = _state
+
+    fun dispatch(action: PodcastAction) {
+        _state.value = podcastReducer(_state.value, action)
+    }
+}
+
+```kotlin
+interface PodcastApi {
+    @GET("api/v1/podcasts/lookup")
+    suspend fun getPodcasts(@Query("ids") ids: String): PodcastResponse
+}
+``
+```kotlin
+object RetrofitInstance {
+    private const val BASE_URL = "https://api.spotify.com/v1/"
+
+    val api: PodcastApi = Retrofit.Builder()
+        .baseUrl(BASE_URL)
+        .addConverterFactory(GsonConverterFactory.create())
+        .build()
+        .create(PodcastApi::classes
+```kotlin
+@Entity(tableName = "podcasts")
+data class Podcast(
+    @PrimaryKey val id: String,
+    val name: String,
+    val description: String,
+    val imageUrl: String
+)
+```
+```kotlin
+@Dao
+interface PodcastDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPodcasts(podcasts: List<Podcast>)
+
+    @Query("SELECT * FROM podcasts")
+    suspend fun getAllPodcasts(): List<Podcast>
+}
+```
+
+```kotlin
+@Database(entities = [Podcast::class], version = 1)
+abstract class PodcastDatabase : RoomDatabase() {
+    abstract fun podcastDao(): PodcastDao
+}
+
+```kotlin
+class PodcastViewModel(application: Application) : AndroidViewModel(application) {
+    private val podcastStore = PodcastStore()
+    private val repository: PodcastRepository = PodcastRepository()
+
+    val podcastState = podcastStore.state
+
+    fun loadPodcasts() {
+        podcastStore.dispatch(PodcastAction.SetLoading(true))
+        viewModelScope.launch {
+            try {
+                val podcasts = repository.getPodcastsFromApi()
+                podcastStore.dispatch(PodcastAction.SetPodcasts(podcasts))
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }
+    }
+}
+```
+```kotlin
+class MainActivity : AppCompatActivity() {
+    private lateinit var viewModel: PodcastViewModel
+    private lateinit var adapter: PodcastAdapter
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        viewModel = ViewModelProvider(this).get(PodcastViewModel::class.java)
+        adapter = PodcastAdapter()
+
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
+
+        viewModel.podcastState.collect { state ->
+            if (state.isLoading) {
+                // Show loading indicator
+            } else {
+                adapter.submitList(state.podcasts)
+            }
+        }
+
+        viewModel.loadPodcasts()
+    }
+}
+```
+```kotlin
+class PodcastAdapter : ListAdapter<Podcast, PodcastViewHolder>(PodcastDiffCallback()) {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PodcastViewHolder {
+        val binding = ListItemPodcastBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        return PodcastViewHolder(binding)
+    }
+
+    override fun onBindViewHolder(holder: PodcastViewHolder, position: Int) {
+        val podcast = getItem(position)
+        holder.bind(podcast)
+    }
+}
