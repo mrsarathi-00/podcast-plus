@@ -1,0 +1,11 @@
+@Composable
+fun AppNavigation() {
+    val navController = rememberNavController()
+    NavHost(navController, startDestination = "home") {
+        composable("home") { HomeScreen(navController) }
+        composable("details/{podcastId}") { backStackEntry ->
+            PodcastDetailsScreen(backStackEntry.arguments?.getString("podcastId")!!)
+        }
+        composable("settings") { SettingsScreen() }
+    }
+}
