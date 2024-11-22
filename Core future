@@ -1,0 +1,26 @@
+val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+
+LaunchedEffect(Unit) {
+    exoPlayer.setMediaItem(MediaItem.fromUri("https://audio.example.com/podcast.mp3"))
+    exoPlayer.prepare()
+    exoPlayer.play()
+}
+
+DisposableEffect(Unit) {
+    onDispose { exoPlayer.release() }
+}
+@Entity
+data class PodcastEntity(
+    @PrimaryKey val id: String,
+    val title: String,
+    val description: String
+)
+
+@Dao
+interface PodcastDao {
+    @Insert
+    suspend fun insert(podcast: PodcastEntity)
+
+    @Query("SELECT * FROM PodcastEntity")
+    suspend fun getAll(): List<PodcastEntity>
+}
