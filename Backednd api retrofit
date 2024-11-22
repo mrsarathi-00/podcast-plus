@@ -1,0 +1,16 @@
+interface PodcastApi {
+    @GET("podcasts")
+    suspend fun getPodcasts(): List<Podcast>
+}
+
+object ApiClient {
+    private const val BASE_URL = "https://api.example.com/"
+
+    val podcastApi: PodcastApi by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(PodcastApi::class.java)
+    }
+}
