@@ -1,0 +1,25 @@
+data class AppState(
+    val podcasts: List<Podcast> = emptyList(),
+    val currentPodcast: Podcast? = null,
+    val theme: ThemeMode = ThemeMode.LIGHT
+)
+sealed class Action {
+    data class LoadPodcasts(val podcasts: List<Podcast>) : Action()
+    data class SelectPodcast(val podcast: Podcast) : Action()
+    data class ChangeTheme(val theme: ThemeMode) : Action()
+}
+fun reducer(state: AppState, action: Action): AppState {
+    return when (action) {
+        is Action.LoadPodcasts -> state.copy(podcasts = action.podcasts)
+        is Action.SelectPodcast -> state.copy(currentPodcast = action.podcast)
+        is Action.ChangeTheme -> state.copy(theme = action.theme)
+    }
+}
+class Store(initialState: AppState, private val reducer: (AppState, Action) -> AppState) {
+    private val state = MutableStateFlow(initialState)
+    val currentState: StateFlow<AppState> = state
+
+    fun dispatch(action: Action) {
+        state.value = reducer(state.value, action)
+    }
+}
